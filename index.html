@@ -21,7 +21,6 @@
             overflow-x: hidden;
         }
         
-        /* Pseudo-Fullscreen Fallback for Google Sites restriction */
         body.pseudo-fullscreen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; z-index: 99999; margin: 0; padding: 0; overflow: hidden; border-radius: 0; }
         body.pseudo-fullscreen .app-container { margin-top: 0; max-width: 100%; padding: 10px; height: 100%; display: flex; flex-direction: column;}
         body.pseudo-fullscreen #main-ui { flex-grow: 1; display: flex; flex-direction: column; }
@@ -271,7 +270,7 @@
             document.getElementById('btn-review-mistakes').style.display = 'none';
 
             let listContainer = document.getElementById('dataset-list');
-            listContainer.style.display = 'flex'
+            listContainer.style.display = 'flex'; 
             listContainer.innerHTML = '';
 
             DATASETS.forEach(ds => {
@@ -561,8 +560,8 @@
             renderDecks(); 
         }
 
-        // ANTI-FREEZE REGEX CLEANER
-        function clean(text, wordToRemove) {
+        // --- DYNAMIC CLEANER (SUPPORTS CUSTOM BLANKS) ---
+        function clean(text, wordToRemove, blankStyle = "...") {
             if (!text) return "No data.";
             var c = text.replace(/<[^>]*>?/gm, ' '); 
             c = c.split(/(?:syn\.|ant\.)/i)[0];
@@ -570,7 +569,7 @@
             if (wordToRemove) {
                 try {
                     let safeWord = wordToRemove.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    c = c.replace(new RegExp(safeWord, 'gi'), "____");
+                    c = c.replace(new RegExp(safeWord, 'gi'), blankStyle);
                 } catch(e) {}
             }
             
@@ -613,19 +612,21 @@
             }
 
             let displayPrompt = currentQuestionTarget.word;
-            let targetOptionText = clean(currentQuestionTarget.def, currentQuestionTarget.word);
+            // DYNAMIC BLANKING: Options use "...", Prompts use "____"
+            let targetOptionText = clean(currentQuestionTarget.def, currentQuestionTarget.word, "...");
 
             if (qMode === 1) {
-                displayPrompt = clean(currentQuestionTarget.def, "");
+                // The prompt is the definition, so we blank out the idiom if it's in there
+                displayPrompt = clean(currentQuestionTarget.def, currentQuestionTarget.word, "____");
                 targetOptionText = currentQuestionTarget.word;
             } else if (qMode === 2) {
-                displayPrompt = `"${currentQuestionTarget.extra}"`;
+                // The prompt is the context sentence, heavily blanked out
+                displayPrompt = `"${clean(currentQuestionTarget.extra, currentQuestionTarget.word, "____")}"`;
                 targetOptionText = currentQuestionTarget.word;
             }
 
             var options = [{ text: targetOptionText, isCorrect: true }];
 
-            // SMART DISTRACTOR LENGTH MATCHING
             let targetLen = targetOptionText.length;
             let distractorPool = [];
             
@@ -636,7 +637,6 @@
                 }
             }
 
-            // Length sorting
             distractorPool.sort((a,b) => {
                 let lenA = (qMode === 1 || qMode === 2) ? a.word.length : a.def.length;
                 let lenB = (qMode === 1 || qMode === 2) ? b.word.length : b.def.length;
@@ -645,18 +645,17 @@
 
             for(let i=0; i<distractorPool.length && options.length < 4; i++) {
                 let rItem = distractorPool[i];
-                let dText = (qMode === 1 || qMode === 2) ? rItem.word : clean(rItem.def, rItem.word);
+                let dText = (qMode === 1 || qMode === 2) ? rItem.word : clean(rItem.def, rItem.word, "...");
                 if (dText && dText.length > 1 && !options.find(o => o.text === dText)) {
                     options.push({ text: dText, isCorrect: false });
                 }
             }
 
-            // ANTI-FREEZE LOOP BREAKER (MAX 100 ATTEMPTS)
             let attempts = 0;
             while(options.length < 4 && attempts < 100) {
                 attempts++;
                 let rItem = master[Math.floor(Math.random() * master.length)];
-                let dText = (qMode === 1 || qMode === 2) ? rItem.word : clean(rItem.def, rItem.word);
+                let dText = (qMode === 1 || qMode === 2) ? rItem.word : clean(rItem.def, rItem.word, "...");
                 if (dText && dText.length > 1 && !options.find(o => o.text === dText)) {
                     options.push({ text: dText, isCorrect: false });
                 }
@@ -699,7 +698,6 @@
             hintImg.style.opacity = '0'; 
             var tempImg = new Image();
             tempImg.onload = function() { hintImg.src = tempImg.src; hintImg.style.opacity = '1'; };
-            // Ensure bizarre characters don't break the image URL
             let safeImgQuery = qObj.wordRef.split(' ')[0].replace(/[^a-zA-Z]/g, '');
             tempImg.src = "https://loremflickr.com/320/240/" + encodeURIComponent(safeImgQuery) + "?random=" + new Date().getTime();
             

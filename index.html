@@ -21,6 +21,7 @@
             overflow-x: hidden;
         }
         
+        /* Pseudo-Fullscreen Fallback for Google Sites restriction */
         body.pseudo-fullscreen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; z-index: 99999; margin: 0; padding: 0; overflow: hidden; border-radius: 0; }
         body.pseudo-fullscreen .app-container { margin-top: 0; max-width: 100%; padding: 10px; height: 100%; display: flex; flex-direction: column;}
         body.pseudo-fullscreen #main-ui { flex-grow: 1; display: flex; flex-direction: column; }
@@ -104,10 +105,6 @@
             
             <div id="dataset-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
 
-            <button class="btn-review" id="btn-review-mistakes" onclick="enterApp('memory')">
-                Review <span id="entry-mistake-count">0</span> Focus Words
-            </button>
-
             <div class="data-controls">
                 <button class="btn-data" onclick="exportData()">💾 Save Offline Backup</button>
                 <button class="btn-data" onclick="document.getElementById('file-upload').click()">📂 Load Backup</button>
@@ -128,10 +125,16 @@
                     <span class="stat-label" id="dash-dataset-name">LIBRARY</span><div id="dash-total" class="stat-value" style="color: var(--text-main);">0</div>
                 </div>
             </div>
+
             <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                 <h3 style="color: #fff; margin: 5px 0 0 0; font-weight: 800; font-size: 1.1rem;">Study Decks</h3>
                 <button class="btn-data" style="margin:0;" onclick="showEntryScreen()">Change Library</button>
             </div>
+
+            <button class="btn-review" id="dash-review-mistakes" onclick="enterApp('memory')" style="margin-top: 0; display: none;">
+                Review <span id="dash-mistake-count">0</span> Focus Words
+            </button>
+
             <div id="deck-container" class="deck-grid"></div>
         </div>
 
@@ -267,7 +270,6 @@
             document.getElementById('dashboard').style.display = 'none';
             document.getElementById('main-ui').style.display = 'none';
             document.getElementById('btn-reload').style.display = 'none';
-            document.getElementById('btn-review-mistakes').style.display = 'none';
 
             let listContainer = document.getElementById('dataset-list');
             listContainer.style.display = 'flex'; 
@@ -303,14 +305,6 @@
 
             document.getElementById('dataset-list').style.display = 'none';
             document.getElementById('btn-reload').style.display = 'inline-block';
-            
-            let pData = appData.progress[activeDatasetId];
-            if (pData.mistakes && pData.mistakes.length > 0) {
-                document.getElementById('entry-mistake-count').innerText = pData.mistakes.length;
-                document.getElementById('btn-review-mistakes').style.display = 'block';
-            } else {
-                document.getElementById('btn-review-mistakes').style.display = 'none';
-            }
 
             if (appData.caches[activeDatasetId]) {
                 parseAndChunk(appData.caches[activeDatasetId]);
@@ -469,6 +463,7 @@
             });
         }
 
+        // --- DASHBOARD UI UPDATES & FOCUS MODE TOGGLE ---
         function updateDashStats() {
             if(!activeDatasetId) return;
             let pData = appData.progress[activeDatasetId];
@@ -476,6 +471,15 @@
             document.getElementById('score').innerText = pData.score;
             document.getElementById('streak').innerText = pData.streak;
             document.getElementById('dash-mastered').innerText = pData.mastered.length;
+
+            // Handle Focus Mode Button Visibility
+            let mistakeBtn = document.getElementById('dash-review-mistakes');
+            if (pData.mistakes && pData.mistakes.length > 0) {
+                document.getElementById('dash-mistake-count').innerText = pData.mistakes.length;
+                mistakeBtn.style.display = 'block';
+            } else {
+                mistakeBtn.style.display = 'none';
+            }
         }
 
         // --- 5. AGGRESSIVE FULLSCREEN & GOOGLE SITES FALLBACK ---
@@ -503,18 +507,17 @@
         // --- 6. NAVIGATION & ENGINE ---
         function enterApp(mode) {
             enforceFullscreen();
-            document.getElementById('entry-screen').style.display = 'none';
-            document.getElementById('dataset-list').style.display = 'flex'; 
-
+            
             if (mode === 'memory') {
                 let pData = appData.progress[activeDatasetId];
                 activeDeck = master.filter(function(w) { return pData.mistakes.includes(w.word); });
                 currentMode = 'memory';
+                
+                // Switch from Dashboard to Quiz UI
+                document.getElementById('dashboard').style.display = 'none';
                 document.getElementById('main-ui').style.display = 'flex';
                 historyArray = []; historyIndex = -1;
                 generateQuestion();
-            } else {
-                document.getElementById('dashboard').style.display = 'flex';
             }
         }
 
@@ -558,6 +561,7 @@
             document.getElementById('main-ui').style.display = 'none';
             document.getElementById('dashboard').style.display = 'flex';
             renderDecks(); 
+            updateDashStats(); // Ensure Focus button updates immediately upon exiting
         }
 
         // --- DYNAMIC CLEANER (SUPPORTS CUSTOM BLANKS) ---
@@ -612,15 +616,12 @@
             }
 
             let displayPrompt = currentQuestionTarget.word;
-            // DYNAMIC BLANKING: Options use "...", Prompts use "____"
             let targetOptionText = clean(currentQuestionTarget.def, currentQuestionTarget.word, "...");
 
             if (qMode === 1) {
-                // The prompt is the definition, so we blank out the idiom if it's in there
                 displayPrompt = clean(currentQuestionTarget.def, currentQuestionTarget.word, "____");
                 targetOptionText = currentQuestionTarget.word;
             } else if (qMode === 2) {
-                // The prompt is the context sentence, heavily blanked out
                 displayPrompt = `"${clean(currentQuestionTarget.extra, currentQuestionTarget.word, "____")}"`;
                 targetOptionText = currentQuestionTarget.word;
             }

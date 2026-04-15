@@ -138,8 +138,7 @@ function startDeck(index) {
     let pData = appData.progress[activeDatasetId];
     currentDeckLabel = decks[index].label;
     currentMode = 'normal';
-    historyArray = []; 
-    historyIndex = -1;
+    historyArray = []; historyIndex = -1;
 
     if (pData.deckStates[currentDeckLabel] && pData.deckStates[currentDeckLabel].length > 0) {
         activeDeck = [];
@@ -294,40 +293,31 @@ function generateQuestion() {
 
 
 // ==========================================
-// NEKOS.BEST SFW NLP MAPPING ENGINE
+// P0LLINATI0NS SAFE-GEN ENGINE
 // ==========================================
-function getNekosBestReaction(def) {
-    if (!def) return 'think';
-    const d = def.toLowerCase();
-
-    // Map GRE Root Concepts directly to public nekos.best GIF endpoints
-    const emotions = [
-        { roots: ['angr', 'mad', 'rage', 'furi', 'wrath', 'temper', 'hostil', 'attack', 'fight', 'violen', 'irat'], endpoint: 'angry' },
-        { roots: ['sad', 'cry', 'sorrow', 'grief', 'depress', 'mourn', 'gloom', 'despair', 'regret'], endpoint: 'cry' },
-        { roots: ['happ', 'joy', 'glad', 'cheer', 'good', 'prais', 'smile', 'delight', 'celebr', 'amicabl'], endpoint: 'happy' },
-        { roots: ['fear', 'terror', 'panic', 'scare', 'timid', 'afraid', 'anxi', 'dread', 'coward', 'danger'], endpoint: 'shocked' },
-        { roots: ['confus', 'baffl', 'perplex', 'puzzl', 'myster', 'complex', 'obscur', 'unclear', 'bewild'], endpoint: 'confused' },
-        { roots: ['disgust', 'mock', 'sarcasm', 'disdain', 'scorn', 'despis', 'contempt', 'ridicul', 'nope'], endpoint: 'nope' },
-        { roots: ['surpris', 'shock', 'amaz', 'wonder', 'sudden', 'astonish', 'stun', 'startl'], endpoint: 'shocked' },
-        { roots: ['mind', 'think', 'reason', 'logic', 'smart', 'know', 'understand', 'memor', 'wise', 'study'], endpoint: 'think' },
-        { roots: ['sleep', 'bore', 'slow', 'sluggish', 'delay', 'late', 'tedious', 'dull', 'lazy'], endpoint: 'bored' },
-        { roots: ['proud', 'power', 'strong', 'arrogant', 'boast', 'brag', 'smug', 'vain', 'conceit', 'evil', 'greed', 'avaric'], endpoint: 'smug' },
-        { roots: ['weak', 'frail', 'fragil', 'faint', 'feebl', 'vulnerabl'], endpoint: 'cry' },
-        { roots: ['speak', 'talk', 'say', 'word', 'speech', 'agree'], endpoint: 'nod' }
-    ];
-
-    for (let emo of emotions) {
-        for (let root of emo.roots) {
-            // Check if the root appears anywhere in the definition
-            if (new RegExp("\\b" + root, "i").test(d)) {
-                return emo.endpoint;
-            }
-        }
-    }
+function getAiImageUrl(definition) {
+    if (!definition) return '';
     
-    // Pseudo-random safe fallback for words with no matching roots
-    const fallbacks = ['smile', 'think', 'stare', 'shrug', 'nod', 'wink'];
-    return fallbacks[def.length % fallbacks.length];
+    // Step 1: Clean the raw meaning
+    let cleanMeaning = definition.replace(/[.*+?^${}()|[\]\\]/g, ' ').replace(/\s+/g, ' ').trim();
+    if(cleanMeaning.length > 200) cleanMeaning = cleanMeaning.substring(0,200);
+
+    // Step 2: ENGINEER SAFETY & STYLE
+    // We force a cartoon/illustration style (inherently safer than photorealism)
+    // We strictly forbid adult concepts
+    let safetyStyle = "flat vector illustration, clean lines, white background";
+    let forbidden = "no profanity, no nudity, no violence, no disturbing content, educational style";
+    
+    // Combine everything into one final mathematical string
+    let finalPrompt = `${cleanMeaning} -- style: ${safetyStyle} -- negative: ${forbidden}`;
+
+    // Step 3: Append a mathematical seed based on the current minute
+    // This makes the image look consistent if swiped away and back, 
+    // but allows it to be regenerated later.
+    let minutesSinceEpoch = Math.floor(Date.now() / 60000);
+    
+    // Final encoded URL generator
+    return "https://image.pollinations.ai/prompt/" + encodeURIComponent(finalPrompt) + "?width=400&height=200&seed=" + minutesSinceEpoch + "&nologo=true&private=true";
 }
 
 
@@ -336,50 +326,74 @@ function displayQuestion(qObj) {
     enforceFullscreen(); 
     
     let badge = document.getElementById('question-type-badge');
-    if (activeDatasetId === 'idioms') {
-        badge.style.display = 'inline-block';
-        badge.innerText = qObj.badgeText;
-    } else {
-        badge.style.display = 'none';
+    if (badge) {
+        if (activeDatasetId === 'idioms') {
+            badge.style.display = 'inline-block';
+            badge.innerText = qObj.badgeText;
+        } else {
+            badge.style.display = 'none';
+        }
     }
 
     document.getElementById('word-display').innerText = qObj.displayPrompt;
     
     // ==========================================
-    // RENDER THE PUBLIC ANIMATED GIF
+    // RENDER THE AI GENERATED IMAGE
     // ==========================================
     var hintBox = document.getElementById('hint-box');
+    var hintImg = document.getElementById('hint-img');
     
     hintBox.style.display = 'flex';
     hintBox.style.justifyContent = 'center';
     hintBox.style.alignItems = 'center';
-    hintBox.style.padding = '10px';
     hintBox.style.border = 'none';
+    hintBox.style.background = 'rgba(0,0,0,0.03)'; // Very subtle background
     hintBox.style.boxShadow = 'none';
-    hintBox.style.background = 'transparent';
     
-    // Custom Image Priority Override (Column D)
+    // Hide old image and show spinner while AI is "painting"
+    hintImg.style.display = 'none';
+    hintBox.innerHTML = `<div class="spinner" style="width: 30px; height: 30px; border-width: 3px; border-top-color: var(--primary);"></div><img id="hint-img" style="display:none; max-height:200px; max-width:100%; border-radius:15px; box-shadow:0 8px 25px rgba(0,0,0,0.15);">`;
+    hintImg = document.getElementById('hint-img'); // re-reference after innerHTML overwrite
+
+    // Feature: Teacher Custom Image Override (Column D)
     if (qObj.target.customImage) {
-        hintBox.innerHTML = `<img src="${qObj.target.customImage}" style="max-height: 180px; max-width: 100%; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">`;
+        hintImg.src = qObj.target.customImage;
     } else {
-        // Show a brief loading spinner while fetching the GIF
-        hintBox.innerHTML = `<div class="spinner" style="width: 30px; height: 30px; border-width: 3px; border-top-color: var(--primary);"></div>`;
-        
-        // Dynamically hit the nekos.best SFW endpoint
-        let endpoint = getNekosBestReaction(qObj.target.def);
-        fetch(`https://nekos.best/api/v2/${endpoint}`)
-            .then(res => res.json())
-            .then(data => {
-                // Ensure the user hasn't already swiped to the next question before it loaded
-                if(data.results && data.results.length > 0 && canAnswer) {
-                    hintBox.innerHTML = `<img src="${data.results[0].url}" style="max-height: 200px; max-width: 100%; border-radius: 15px; box-shadow: 0 8px 25px rgba(0,0,0,0.3);">`;
-                }
-            })
-            .catch(err => {
-                // Failsafe in case they are offline
-                hintBox.innerHTML = `<span style="font-size: 50px;">🧠</span>`;
-            });
+        // Feed the actual meaning into the Safe-Prompt Engine!
+        hintImg.src = getAiImageUrl(qObj.target.def);
     }
+
+    // Dynamic Spinner Logic
+    hintImg.onload = function() {
+        if(document.querySelector('.spinner')) document.querySelector('.spinner').style.display = 'none';
+        hintImg.style.display = 'block';
+    };
+    
+    hintImg.onerror = function() {
+        if(document.querySelector('.spinner')) document.querySelector('.spinner').style.display = 'none';
+        hintBox.innerHTML = `<span style="font-size: 50px;">🧠</span>`;
+    };
+
+    // TAP TO REGENERATE FIX
+    // If they click the image, it changes the minute seed, forcing a new AI image
+    hintBox.onclick = function() {
+        if (!canAnswer) return;
+        hintImg.style.display = 'none';
+        hintBox.innerHTML = `<div class="spinner" style="width: 30px; height: 30px; border-width: 3px; border-top-color: var(--primary);"></div><img id="hint-img" style="display:none; max-height:200px; max-width:100%; border-radius:15px; box-shadow:0 8px 25px rgba(0,0,0,0.15);">`;
+        hintImg = document.getElementById('hint-img'); // re-reference
+
+        let manualSeed = Math.floor(Date.now()); // Unique seed every millisecond
+        let cleanDef = qObj.target.def.replace(/[.*+?^${}()|[\]\\]/g, ' ').replace(/\s+/g, ' ').trim();
+        if(cleanDef.length > 200) cleanDef = cleanDef.substring(0,200);
+        
+        let newPrompt = `${cleanDef} -- style: flat vector illustration, clean lines, white background -- negative: no profanity, no nudity, no violence, no disturbing content, educational style`;
+        
+        hintImg.src = "https://image.pollinations.ai/prompt/" + encodeURIComponent(newPrompt) + "?width=400&height=200&seed=" + manualSeed + "&nologo=true&private=true";
+        hintImg.onload = function() {
+            if(document.querySelector('.spinner')) document.querySelector('.spinner').style.display = 'none';
+            hintImg.style.display = 'block';
+        };
+    };
 
     // ==========================================
     // OPTIONS & ANSWER HANDLING

@@ -1,0 +1,448 @@
+// ==========================================
+// INITIALIZATION & UI
+// ==========================================
+window.onload = async function() {
+    await loadData();
+    buildDatasetMenu();
+};
+
+function buildDatasetMenu() {
+    document.getElementById('loader').style.display = 'none';
+    document.getElementById('entry-screen').style.display = 'flex';
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('main-ui').style.display = 'none';
+    document.getElementById('btn-reload').style.display = 'none';
+
+    let listContainer = document.getElementById('dataset-list');
+    listContainer.style.display = 'flex'; 
+    listContainer.innerHTML = '';
+
+    DATASETS.forEach(ds => {
+        let isCached = appData.caches && appData.caches[ds.id];
+        let progress = appData.progress[ds.id] || {};
+        let score = progress.score || 0;
+        let statusText = isCached ? `Score: ${score}` : "Requires Download";
+        
+        let btn = document.createElement('button');
+        btn.className = 'dataset-btn';
+        btn.innerHTML = `<span>${ds.name}</span> <span class="dataset-status">${statusText}</span>`;
+        btn.onclick = () => { selectDataset(ds.id); };
+        listContainer.appendChild(btn);
+    });
+}
+
+function showEntryScreen() {
+    enforceFullscreen();
+    buildDatasetMenu();
+}
+
+function updateDashStats() {
+    if(!activeDatasetId) return;
+    let pData = appData.progress[activeDatasetId];
+    document.getElementById('dash-score').innerText = pData.score;
+    document.getElementById('score').innerText = pData.score;
+    document.getElementById('streak').innerText = pData.streak;
+    document.getElementById('dash-mastered').innerText = pData.mastered.length;
+
+    let mistakeBtn = document.getElementById('dash-review-mistakes');
+    if (pData.mistakes && pData.mistakes.length > 0) {
+        document.getElementById('dash-mistake-count').innerText = pData.mistakes.length;
+        mistakeBtn.style.display = 'block';
+    } else {
+        mistakeBtn.style.display = 'none';
+    }
+}
+
+function renderDecks() {
+    var container = document.getElementById('deck-container');
+    container.innerHTML = '';
+    let pData = appData.progress[activeDatasetId];
+
+    decks.forEach(function(d, index) {
+        var masteredInDeck = d.words.filter(w => pData.mastered.includes(w.word)).length;
+        var progressPct = Math.min(100, (masteredInDeck / d.words.length) * 100);
+
+        var div = document.createElement('div');
+        div.className = 'deck-card';
+        div.innerHTML = `
+            <div class="deck-letter">${d.label}</div>
+            <div class="deck-info">${masteredInDeck} / ${d.words.length}</div>
+            <div class="deck-progress-bar"><div class="deck-progress-fill" style="width: ${progressPct}%"></div></div>
+        `;
+        div.onclick = function() { startDeck(index); };
+        container.appendChild(div);
+    });
+}
+
+// ==========================================
+// THEME ENGINE
+// ==========================================
+const themes = ['', 'theme-light', 'theme-blue', 'theme-forest'];
+let currentThemeIndex = 0;
+
+function toggleTheme() {
+    currentThemeIndex++;
+    if (currentThemeIndex >= themes.length) currentThemeIndex = 0;
+    
+    document.body.className = '';
+    if (themes[currentThemeIndex] !== '') {
+        document.body.classList.add(themes[currentThemeIndex]);
+    }
+    enforceFullscreen();
+}
+
+// ==========================================
+// FULLSCREEN CONTROLS
+// ==========================================
+function enforceFullscreen() {
+    var doc = window.document;
+    var docEl = doc.documentElement;
+    var req = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
+    
+    let themeClass = themes[currentThemeIndex];
+    
+    if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+        if(req) {
+            req.call(docEl).catch(err => {
+                document.body.className = themeClass ? themeClass + ' pseudo-fullscreen' : 'pseudo-fullscreen';
+            });
+        } else {
+            document.body.className = themeClass ? themeClass + ' pseudo-fullscreen' : 'pseudo-fullscreen';
+        }
+    } else {
+        document.body.className = themeClass; 
+    }
+}
+
+document.body.addEventListener('touchstart', enforceFullscreen, { passive: true });
+document.body.addEventListener('click', enforceFullscreen, { passive: true });
+
+// ==========================================
+// GAME NAVIGATION & DECK MANAGEMENT
+// ==========================================
+function enterApp(mode) {
+    enforceFullscreen();
+    if (mode === 'memory') {
+        let pData = appData.progress[activeDatasetId];
+        activeDeck = master.filter(function(w) { return pData.mistakes.includes(w.word); });
+        currentMode = 'memory';
+        document.getElementById('dashboard').style.display = 'none';
+        document.getElementById('main-ui').style.display = 'flex';
+        historyArray = []; historyIndex = -1;
+        generateQuestion();
+    }
+}
+
+function startDeck(index) {
+    enforceFullscreen();
+    let pData = appData.progress[activeDatasetId];
+    currentDeckLabel = decks[index].label;
+    currentMode = 'normal';
+    historyArray = []; 
+    historyIndex = -1;
+
+    if (pData.deckStates[currentDeckLabel] && pData.deckStates[currentDeckLabel].length > 0) {
+        activeDeck = [];
+        pData.deckStates[currentDeckLabel].forEach(function(wordStr) {
+            var found = master.find(function(w) { return w.word === wordStr; });
+            if (found) activeDeck.push(found);
+        });
+        if(activeDeck.length === 0) activeDeck = decks[index].words.slice().sort(function() { return Math.random() - 0.5; });
+    } else {
+        activeDeck = decks[index].words.slice(); 
+        activeDeck.sort(function() { return Math.random() - 0.5; });
+    }
+    
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('main-ui').style.display = 'flex';
+    
+    generateQuestion();
+}
+
+function exitToDashboard() {
+    enforceFullscreen();
+    let pData = appData.progress[activeDatasetId];
+    
+    if (currentMode === 'normal') {
+        if (canAnswer && currentQuestionTarget) activeDeck.push(currentQuestionTarget);
+        if (activeDeck.length === 0) delete pData.deckStates[currentDeckLabel];
+        else pData.deckStates[currentDeckLabel] = activeDeck.map(function(w){return w.word;});
+        saveData();
+    }
+
+    document.getElementById('main-ui').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'flex';
+    renderDecks(); 
+    updateDashStats(); 
+}
+
+// ==========================================
+// QUIZ ENGINE
+// ==========================================
+function clean(text, wordToRemove, blankStyle = "...") {
+    if (!text) return "No data.";
+    var c = text.replace(/<[^>]*>?/gm, ' '); 
+    c = c.split(/(?:syn\.|ant\.)/i)[0];
+    
+    if (wordToRemove) {
+        try {
+            let safeWord = wordToRemove.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            c = c.replace(new RegExp(safeWord, 'gi'), blankStyle);
+        } catch(e) {}
+    }
+    return c.replace(/\s+/g, ' ').trim().replace(/^[;,\-:\.]+|[;,\-:\.]+$/g, "");
+}
+
+function goNext() {
+    enforceFullscreen();
+    if (historyIndex < historyArray.length - 1) {
+        historyIndex++;
+        displayQuestion(historyArray[historyIndex]);
+    } else generateQuestion();
+}
+
+function goBack() {
+    enforceFullscreen();
+    if (historyIndex > 0) {
+        historyIndex--;
+        displayQuestion(historyArray[historyIndex]);
+    }
+}
+
+function generateQuestion() {
+    if (activeDeck.length === 0) {
+        exitToDashboard();
+        return;
+    }
+
+    canAnswer = false; 
+    currentQuestionTarget = activeDeck.pop(); 
+    
+    let qMode = 0; 
+    let badgeText = "Definition";
+    if (activeDatasetId === 'idioms') {
+        let r = Math.random();
+        if (r < 0.33) { qMode = 1; badgeText = "Find the Idiom"; }
+        else if (r < 0.66 && currentQuestionTarget.extra) { qMode = 2; badgeText = "Complete Context"; }
+        else { qMode = 0; badgeText = "Meaning"; }
+    }
+
+    let displayPrompt = currentQuestionTarget.word;
+    let targetOptionText = clean(currentQuestionTarget.def, currentQuestionTarget.word, "...");
+
+    if (qMode === 1) {
+        displayPrompt = clean(currentQuestionTarget.def, currentQuestionTarget.word, "____");
+        targetOptionText = currentQuestionTarget.word;
+    } else if (qMode === 2) {
+        displayPrompt = `"${clean(currentQuestionTarget.extra, currentQuestionTarget.word, "____")}"`;
+        targetOptionText = currentQuestionTarget.word;
+    }
+
+    var options = [{ text: targetOptionText, isCorrect: true }];
+
+    let targetLen = targetOptionText.length;
+    let distractorPool = [];
+    
+    for(let i=0; i<40; i++) {
+        let rItem = master[Math.floor(Math.random() * master.length)];
+        if (rItem.word !== currentQuestionTarget.word) {
+            distractorPool.push(rItem);
+        }
+    }
+
+    distractorPool.sort((a,b) => {
+        let lenA = a.def ? a.def.length : 10;
+        let lenB = b.def ? b.def.length : 10;
+        return Math.abs(lenA - targetLen) - Math.abs(lenB - targetLen);
+    });
+
+    for(let i=0; i<distractorPool.length && options.length < 4; i++) {
+        let dText = clean(distractorPool[i].def, distractorPool[i].word, "...");
+        if (dText && dText.length > 1 && !options.find(o => o.text === dText)) {
+            options.push({ text: dText, isCorrect: false });
+        }
+    }
+
+    let attempts = 0;
+    while(options.length < 4 && attempts < 100) {
+        attempts++;
+        let rItem = master[Math.floor(Math.random() * master.length)];
+        let dText = clean(rItem.def, rItem.word, "...");
+        if (dText && dText.length > 1 && !options.find(o => o.text === dText)) {
+            options.push({ text: dText, isCorrect: false });
+        }
+    }
+
+    while(options.length < 4) {
+        options.push({ text: "None of the above", isCorrect: false });
+    }
+
+    options.sort(function() { return Math.random() - 0.5; });
+    
+    var questionObj = { 
+        target: currentQuestionTarget, 
+        wordRef: currentQuestionTarget.word,
+        displayPrompt: displayPrompt, 
+        badgeText: badgeText,
+        options: options 
+    };
+    
+    historyArray.push(questionObj);
+    historyIndex++;
+    displayQuestion(questionObj);
+}
+
+
+// ==========================================
+// NEKOS.BEST SFW NLP MAPPING ENGINE
+// ==========================================
+function getNekosBestReaction(def) {
+    if (!def) return 'think';
+    const d = def.toLowerCase();
+
+    // Map GRE Root Concepts directly to public nekos.best GIF endpoints
+    const emotions = [
+        { roots: ['angr', 'mad', 'rage', 'furi', 'wrath', 'temper', 'hostil', 'attack', 'fight', 'violen', 'irat'], endpoint: 'angry' },
+        { roots: ['sad', 'cry', 'sorrow', 'grief', 'depress', 'mourn', 'gloom', 'despair', 'regret'], endpoint: 'cry' },
+        { roots: ['happ', 'joy', 'glad', 'cheer', 'good', 'prais', 'smile', 'delight', 'celebr', 'amicabl'], endpoint: 'happy' },
+        { roots: ['fear', 'terror', 'panic', 'scare', 'timid', 'afraid', 'anxi', 'dread', 'coward', 'danger'], endpoint: 'shocked' },
+        { roots: ['confus', 'baffl', 'perplex', 'puzzl', 'myster', 'complex', 'obscur', 'unclear', 'bewild'], endpoint: 'confused' },
+        { roots: ['disgust', 'mock', 'sarcasm', 'disdain', 'scorn', 'despis', 'contempt', 'ridicul', 'nope'], endpoint: 'nope' },
+        { roots: ['surpris', 'shock', 'amaz', 'wonder', 'sudden', 'astonish', 'stun', 'startl'], endpoint: 'shocked' },
+        { roots: ['mind', 'think', 'reason', 'logic', 'smart', 'know', 'understand', 'memor', 'wise', 'study'], endpoint: 'think' },
+        { roots: ['sleep', 'bore', 'slow', 'sluggish', 'delay', 'late', 'tedious', 'dull', 'lazy'], endpoint: 'bored' },
+        { roots: ['proud', 'power', 'strong', 'arrogant', 'boast', 'brag', 'smug', 'vain', 'conceit', 'evil', 'greed', 'avaric'], endpoint: 'smug' },
+        { roots: ['weak', 'frail', 'fragil', 'faint', 'feebl', 'vulnerabl'], endpoint: 'cry' },
+        { roots: ['speak', 'talk', 'say', 'word', 'speech', 'agree'], endpoint: 'nod' }
+    ];
+
+    for (let emo of emotions) {
+        for (let root of emo.roots) {
+            // Check if the root appears anywhere in the definition
+            if (new RegExp("\\b" + root, "i").test(d)) {
+                return emo.endpoint;
+            }
+        }
+    }
+    
+    // Pseudo-random safe fallback for words with no matching roots
+    const fallbacks = ['smile', 'think', 'stare', 'shrug', 'nod', 'wink'];
+    return fallbacks[def.length % fallbacks.length];
+}
+
+
+function displayQuestion(qObj) {
+    canAnswer = true;
+    enforceFullscreen(); 
+    
+    let badge = document.getElementById('question-type-badge');
+    if (activeDatasetId === 'idioms') {
+        badge.style.display = 'inline-block';
+        badge.innerText = qObj.badgeText;
+    } else {
+        badge.style.display = 'none';
+    }
+
+    document.getElementById('word-display').innerText = qObj.displayPrompt;
+    
+    // ==========================================
+    // RENDER THE PUBLIC ANIMATED GIF
+    // ==========================================
+    var hintBox = document.getElementById('hint-box');
+    
+    hintBox.style.display = 'flex';
+    hintBox.style.justifyContent = 'center';
+    hintBox.style.alignItems = 'center';
+    hintBox.style.padding = '10px';
+    hintBox.style.border = 'none';
+    hintBox.style.boxShadow = 'none';
+    hintBox.style.background = 'transparent';
+    
+    // Custom Image Priority Override (Column D)
+    if (qObj.target.customImage) {
+        hintBox.innerHTML = `<img src="${qObj.target.customImage}" style="max-height: 180px; max-width: 100%; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">`;
+    } else {
+        // Show a brief loading spinner while fetching the GIF
+        hintBox.innerHTML = `<div class="spinner" style="width: 30px; height: 30px; border-width: 3px; border-top-color: var(--primary);"></div>`;
+        
+        // Dynamically hit the nekos.best SFW endpoint
+        let endpoint = getNekosBestReaction(qObj.target.def);
+        fetch(`https://nekos.best/api/v2/${endpoint}`)
+            .then(res => res.json())
+            .then(data => {
+                // Ensure the user hasn't already swiped to the next question before it loaded
+                if(data.results && data.results.length > 0 && canAnswer) {
+                    hintBox.innerHTML = `<img src="${data.results[0].url}" style="max-height: 200px; max-width: 100%; border-radius: 15px; box-shadow: 0 8px 25px rgba(0,0,0,0.3);">`;
+                }
+            })
+            .catch(err => {
+                // Failsafe in case they are offline
+                hintBox.innerHTML = `<span style="font-size: 50px;">🧠</span>`;
+            });
+    }
+
+    // ==========================================
+    // OPTIONS & ANSWER HANDLING
+    // ==========================================
+    var list = document.getElementById('options-list');
+    list.innerHTML = ''; 
+    
+    let pData = appData.progress[activeDatasetId];
+
+    qObj.options.forEach(function(opt) {
+        var b = document.createElement('button');
+        b.className = 'option-btn';
+        b.innerText = opt.text;
+        
+        b.onclick = function() {
+            enforceFullscreen();
+            if(!canAnswer) return;
+            canAnswer = false;
+            
+            if(opt.isCorrect) {
+                b.classList.add('correct');
+                pData.score += 10; pData.streak++;
+                if(!pData.mastered.includes(qObj.wordRef)) pData.mastered.push(qObj.wordRef);
+                
+                var mIndex = pData.mistakes.indexOf(qObj.wordRef);
+                if(mIndex > -1) pData.mistakes.splice(mIndex, 1);
+
+                if (currentMode === 'normal') {
+                    pData.deckStates[currentDeckLabel] = activeDeck.map(function(w){return w.word;});
+                }
+                setTimeout(goNext, 800);
+            } else {
+                b.classList.add('wrong');
+                pData.streak = 0;
+                
+                if(!pData.mistakes.includes(qObj.wordRef)) pData.mistakes.push(qObj.wordRef);
+                var mIndex = pData.mastered.indexOf(qObj.wordRef);
+                if(mIndex > -1) pData.mastered.splice(mIndex, 1);
+
+                if (currentMode === 'normal') {
+                    pData.deckStates[currentDeckLabel] = activeDeck.map(function(w){return w.word;});
+                }
+
+                var allBtns = document.querySelectorAll('.option-btn');
+                for(var j=0; j<allBtns.length; j++) {
+                    if(allBtns[j].innerText === qObj.options.find(function(o){return o.isCorrect}).text) allBtns[j].classList.add('correct');
+                }
+            }
+            saveData(); 
+        };
+        list.appendChild(b);
+    });
+}
+
+// ==========================================
+// SWIPE GESTURES
+// ==========================================
+var touchstartX = 0, touchendX = 0;
+var touchSurface = document.getElementById('touch-surface');
+
+touchSurface.addEventListener('touchstart', function(e) { touchstartX = e.changedTouches[0].screenX; }, {passive: true});
+touchSurface.addEventListener('touchend', function(e) {
+    touchendX = e.changedTouches[0].screenX;
+    if ((touchstartX - touchendX) > 50) goNext(); 
+    if ((touchstartX - touchendX) < -50) goBack(); 
+}, {passive: true});

@@ -362,8 +362,8 @@ function displayQuestion(qObj) {
     if (qObj.target.customImage) {
         tempImg.src = qObj.target.customImage;
     } else {
-        // Fetch image with STRICT child-safe context tags
-        tempImg.src = `https://loremflickr.com/320/240/school,study,${searchKeyword}?random=${new Date().getTime()}`;
+        // Fetch image using ONLY the unique meaning keyword to ensure variety
+        tempImg.src = `https://loremflickr.com/320/240/${searchKeyword}?random=${new Date().getTime()}`;
     }
 
     // TAP TO REGENERATE FIX: Pull a new Flickr image
@@ -384,8 +384,8 @@ function displayQuestion(qObj) {
         if (qObj.target.customImage) {
             newTempImg.src = qObj.target.customImage; 
         } else {
-            // New random timestamp forces a new photo for the same keyword
-            newTempImg.src = `https://loremflickr.com/320/240/school,study,${searchKeyword}?random=${new Date().getTime()}`;
+            // New random timestamp forces a new photo for the same exact keyword
+            newTempImg.src = `https://loremflickr.com/320/240/${searchKeyword}?random=${new Date().getTime()}`;
         }
     };
 

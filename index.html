@@ -695,32 +695,45 @@
 
             document.getElementById('word-display').innerText = qObj.displayPrompt;
             
-            // --- Updated Image Loading Logic ---
+            // --- UPDATED IMAGE ENGINE: Definition Meaning Extractor ---
             var hintImg = document.getElementById('hint-img');
             hintImg.style.opacity = '0'; 
 
             var tempImg = new Image();
 
-            // On success, show the image
             tempImg.onload = function() { 
                 hintImg.src = tempImg.src; 
                 hintImg.style.opacity = '1'; 
             };
 
-            // Handle child-safe fallback if the specific word has no emoji
+            // Safest Fallback Option: If image fails or definition parsing breaks
             tempImg.onerror = function() {
-                this.onerror = null; // Prevent infinite loop
-                // Fallback to a professional "Books" icon for missing terms
+                this.onerror = null; 
                 this.src = "https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Books/3D/books_3d.png";
             };
 
-            // Process the word to match the CDN's naming convention (e.g., "Apple/3D/apple_3d.png")
-            let rawWord = qObj.wordRef.split(' ')[0].toLowerCase().replace(/[^a-z]/g, '');
-            let capitalized = rawWord.charAt(0).toUpperCase() + rawWord.slice(1);
+            // Step 1: Clean the definition text
+            let cleanDef = "";
+            if (qObj.target && qObj.target.def) {
+                cleanDef = qObj.target.def.replace(/[^a-zA-Z ]/g, '').toLowerCase();
+            }
 
-            // Set the CDN source
-            tempImg.src = `https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/${capitalized}/3D/${rawWord}_3d.png`;
+            // Step 2: Filter out filler words to find the core meaning
+            let stopWords = ['the', 'and', 'for', 'with', 'about', 'from', 'into', 'that', 'this', 'someone', 'something', 'make', 'have', 'very', 'much', 'without', 'which', 'what', 'when', 'where', 'who', 'how', 'state', 'being', 'quality', 'relating', 'person', 'thing', 'give', 'take', 'like', 'cause', 'action'];
             
+            let defWords = cleanDef.split(' ').filter(w => w.length > 3 && !stopWords.includes(w));
+
+            // Step 3: Sort by length (longer words usually carry more descriptive visual meaning)
+            defWords.sort((a, b) => b.length - a.length);
+
+            // Step 4: Pick the best word, or fallback to the original vocabulary word
+            let searchKeyword = defWords.length > 0 ? defWords[0] : qObj.wordRef.split(' ')[0].replace(/[^a-zA-Z]/g, '');
+
+            // Step 5: Fetch image with STRICT child-safe context tags (school, study)
+            tempImg.src = `https://loremflickr.com/320/240/school,study,${searchKeyword}?random=${new Date().getTime()}`;
+            
+            // -----------------------------------------------------------
+
             var list = document.getElementById('options-list');
             list.innerHTML = '';
             

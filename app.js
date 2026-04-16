@@ -309,7 +309,7 @@ function displayQuestion(qObj) {
     document.getElementById('word-display').innerText = qObj.displayPrompt;
     
     // ==========================================
-    // RENDER IMAGE (SAFE LOREMFLICKR DEFINITION PARSER)
+    // RENDER IMAGE (PICSUM SEED ENGINE)
     // ==========================================
     var hintBox = document.getElementById('hint-box');
     var hintImg = document.getElementById('hint-img');
@@ -362,11 +362,11 @@ function displayQuestion(qObj) {
     if (qObj.target.customImage) {
         tempImg.src = qObj.target.customImage;
     } else {
-        // Fetch image using ONLY the unique meaning keyword to ensure variety
-        tempImg.src = `https://loremflickr.com/320/240/${searchKeyword}?random=${new Date().getTime()}`;
+        // Guarantee a unique photo per keyword using a deterministic text seed
+        tempImg.src = `https://picsum.photos/seed/${searchKeyword}/320/240`;
     }
 
-    // TAP TO REGENERATE FIX: Pull a new Flickr image
+    // TAP TO REGENERATE FIX: Pull a new image if the user taps it
     hintBox.onclick = function() {
         if (!canAnswer) return;
         hintImg.style.display = 'none';
@@ -384,8 +384,9 @@ function displayQuestion(qObj) {
         if (qObj.target.customImage) {
             newTempImg.src = qObj.target.customImage; 
         } else {
-            // New random timestamp forces a new photo for the same exact keyword
-            newTempImg.src = `https://loremflickr.com/320/240/${searchKeyword}?random=${new Date().getTime()}`;
+            // Appending a random number forces a brand new seed photo on tap
+            let randomSeed = searchKeyword + Math.floor(Math.random() * 1000);
+            newTempImg.src = `https://picsum.photos/seed/${randomSeed}/320/240`;
         }
     };
 

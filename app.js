@@ -292,35 +292,6 @@ function generateQuestion() {
 }
 
 
-// ==========================================
-// P0LLINATI0NS SAFE-GEN ENGINE
-// ==========================================
-function getAiImageUrl(definition) {
-    if (!definition) return '';
-    
-    // Step 1: Clean the raw meaning
-    let cleanMeaning = definition.replace(/[.*+?^${}()|[\]\\]/g, ' ').replace(/\s+/g, ' ').trim();
-    if(cleanMeaning.length > 200) cleanMeaning = cleanMeaning.substring(0,200);
-
-    // Step 2: ENGINEER SAFETY & STYLE
-    // We force a cartoon/illustration style (inherently safer than photorealism)
-    // We strictly forbid adult concepts
-    let safetyStyle = "flat vector illustration, clean lines, white background";
-    let forbidden = "no profanity, no nudity, no violence, no disturbing content, educational style";
-    
-    // Combine everything into one final mathematical string
-    let finalPrompt = `${cleanMeaning} -- style: ${safetyStyle} -- negative: ${forbidden}`;
-
-    // Step 3: Append a mathematical seed based on the current minute
-    // This makes the image look consistent if swiped away and back, 
-    // but allows it to be regenerated later.
-    let minutesSinceEpoch = Math.floor(Date.now() / 60000);
-    
-    // Final encoded URL generator
-    return "https://image.pollinations.ai/prompt/" + encodeURIComponent(finalPrompt) + "?width=400&height=200&seed=" + minutesSinceEpoch + "&nologo=true&private=true";
-}
-
-
 function displayQuestion(qObj) {
     canAnswer = true;
     enforceFullscreen(); 
@@ -338,7 +309,7 @@ function displayQuestion(qObj) {
     document.getElementById('word-display').innerText = qObj.displayPrompt;
     
     // ==========================================
-    // RENDER THE AI GENERATED IMAGE
+    // RENDER IMAGE (SAFE LOREMFLICKR DEFINITION PARSER)
     // ==========================================
     var hintBox = document.getElementById('hint-box');
     var hintImg = document.getElementById('hint-img');
@@ -347,53 +318,77 @@ function displayQuestion(qObj) {
     hintBox.style.justifyContent = 'center';
     hintBox.style.alignItems = 'center';
     hintBox.style.border = 'none';
-    hintBox.style.background = 'rgba(0,0,0,0.03)'; // Very subtle background
+    hintBox.style.background = 'rgba(0,0,0,0.03)'; 
     hintBox.style.boxShadow = 'none';
     
-    // Hide old image and show spinner while AI is "painting"
     hintImg.style.display = 'none';
     hintBox.innerHTML = `<div class="spinner" style="width: 30px; height: 30px; border-width: 3px; border-top-color: var(--primary);"></div><img id="hint-img" style="display:none; max-height:200px; max-width:100%; border-radius:15px; box-shadow:0 8px 25px rgba(0,0,0,0.15);">`;
-    hintImg = document.getElementById('hint-img'); // re-reference after innerHTML overwrite
+    hintImg = document.getElementById('hint-img');
 
-    // Feature: Teacher Custom Image Override (Column D)
-    if (qObj.target.customImage) {
-        hintImg.src = qObj.target.customImage;
-    } else {
-        // Feed the actual meaning into the Safe-Prompt Engine!
-        hintImg.src = getAiImageUrl(qObj.target.def);
-    }
+    // Engine: Definition Meaning Extractor
+    var tempImg = new Image();
 
-    // Dynamic Spinner Logic
-    hintImg.onload = function() {
+    tempImg.onload = function() { 
         if(document.querySelector('.spinner')) document.querySelector('.spinner').style.display = 'none';
+        hintImg.src = tempImg.src; 
         hintImg.style.display = 'block';
     };
-    
-    hintImg.onerror = function() {
+
+    // Safest Fallback Option: If image fails or definition parsing breaks
+    tempImg.onerror = function() {
+        this.onerror = null; 
         if(document.querySelector('.spinner')) document.querySelector('.spinner').style.display = 'none';
-        hintBox.innerHTML = `<span style="font-size: 50px;">🧠</span>`;
+        hintImg.src = "https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Books/3D/books_3d.png";
+        hintImg.style.display = 'block';
     };
 
-    // TAP TO REGENERATE FIX
-    // If they click the image, it changes the minute seed, forcing a new AI image
+    // Step 1: Clean the definition text
+    let cleanDef = "";
+    if (qObj.target && qObj.target.def) {
+        cleanDef = qObj.target.def.replace(/[^a-zA-Z ]/g, '').toLowerCase();
+    }
+
+    // Step 2: Filter out filler words to find the core meaning
+    let stopWords = ['the', 'and', 'for', 'with', 'about', 'from', 'into', 'that', 'this', 'someone', 'something', 'make', 'have', 'very', 'much', 'without', 'which', 'what', 'when', 'where', 'who', 'how', 'state', 'being', 'quality', 'relating', 'person', 'thing', 'give', 'take', 'like', 'cause', 'action'];
+    let defWords = cleanDef.split(' ').filter(w => w.length > 3 && !stopWords.includes(w));
+
+    // Step 3: Sort by length (longer words usually carry more descriptive visual meaning)
+    defWords.sort((a, b) => b.length - a.length);
+
+    // Step 4: Pick the best word, or fallback to the original vocabulary word
+    let searchKeyword = defWords.length > 0 ? defWords[0] : qObj.wordRef.split(' ')[0].replace(/[^a-zA-Z]/g, '');
+
+    // Feature: Teacher Custom Image Override
+    if (qObj.target.customImage) {
+        tempImg.src = qObj.target.customImage;
+    } else {
+        // Fetch image with STRICT child-safe context tags
+        tempImg.src = `https://loremflickr.com/320/240/school,study,${searchKeyword}?random=${new Date().getTime()}`;
+    }
+
+    // TAP TO REGENERATE FIX: Pull a new Flickr image
     hintBox.onclick = function() {
         if (!canAnswer) return;
         hintImg.style.display = 'none';
         hintBox.innerHTML = `<div class="spinner" style="width: 30px; height: 30px; border-width: 3px; border-top-color: var(--primary);"></div><img id="hint-img" style="display:none; max-height:200px; max-width:100%; border-radius:15px; box-shadow:0 8px 25px rgba(0,0,0,0.15);">`;
-        hintImg = document.getElementById('hint-img'); // re-reference
+        hintImg = document.getElementById('hint-img');
 
-        let manualSeed = Math.floor(Date.now()); // Unique seed every millisecond
-        let cleanDef = qObj.target.def.replace(/[.*+?^${}()|[\]\\]/g, ' ').replace(/\s+/g, ' ').trim();
-        if(cleanDef.length > 200) cleanDef = cleanDef.substring(0,200);
-        
-        let newPrompt = `${cleanDef} -- style: flat vector illustration, clean lines, white background -- negative: no profanity, no nudity, no violence, no disturbing content, educational style`;
-        
-        hintImg.src = "https://image.pollinations.ai/prompt/" + encodeURIComponent(newPrompt) + "?width=400&height=200&seed=" + manualSeed + "&nologo=true&private=true";
-        hintImg.onload = function() {
+        let newTempImg = new Image();
+        newTempImg.onload = function() {
             if(document.querySelector('.spinner')) document.querySelector('.spinner').style.display = 'none';
+            hintImg.src = newTempImg.src;
             hintImg.style.display = 'block';
         };
+        newTempImg.onerror = tempImg.onerror;
+
+        if (qObj.target.customImage) {
+            newTempImg.src = qObj.target.customImage; 
+        } else {
+            // New random timestamp forces a new photo for the same keyword
+            newTempImg.src = `https://loremflickr.com/320/240/school,study,${searchKeyword}?random=${new Date().getTime()}`;
+        }
     };
+
 
     // ==========================================
     // OPTIONS & ANSWER HANDLING

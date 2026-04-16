@@ -309,7 +309,7 @@ function displayQuestion(qObj) {
     document.getElementById('word-display').innerText = qObj.displayPrompt;
     
     // ==========================================
-    // RENDER IMAGE (PICSUM SEED ENGINE)
+    // RENDER IMAGE (PICSUM WORD-SEED ENGINE)
     // ==========================================
     var hintBox = document.getElementById('hint-box');
     var hintImg = document.getElementById('hint-img');
@@ -325,7 +325,6 @@ function displayQuestion(qObj) {
     hintBox.innerHTML = `<div class="spinner" style="width: 30px; height: 30px; border-width: 3px; border-top-color: var(--primary);"></div><img id="hint-img" style="display:none; max-height:200px; max-width:100%; border-radius:15px; box-shadow:0 8px 25px rgba(0,0,0,0.15);">`;
     hintImg = document.getElementById('hint-img');
 
-    // Engine: Definition Meaning Extractor
     var tempImg = new Image();
 
     tempImg.onload = function() { 
@@ -334,36 +333,22 @@ function displayQuestion(qObj) {
         hintImg.style.display = 'block';
     };
 
-    // Safest Fallback Option: If image fails or definition parsing breaks
     tempImg.onerror = function() {
         this.onerror = null; 
         if(document.querySelector('.spinner')) document.querySelector('.spinner').style.display = 'none';
-        hintImg.src = "https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Books/3D/books_3d.png";
+        hintImg.src = "https://placehold.co/320x240/18181b/f43f5e?text=Image+Unavailable";
         hintImg.style.display = 'block';
     };
 
-    // Step 1: Clean the definition text
-    let cleanDef = "";
-    if (qObj.target && qObj.target.def) {
-        cleanDef = qObj.target.def.replace(/[^a-zA-Z ]/g, '').toLowerCase();
-    }
-
-    // Step 2: Filter out filler words to find the core meaning
-    let stopWords = ['the', 'and', 'for', 'with', 'about', 'from', 'into', 'that', 'this', 'someone', 'something', 'make', 'have', 'very', 'much', 'without', 'which', 'what', 'when', 'where', 'who', 'how', 'state', 'being', 'quality', 'relating', 'person', 'thing', 'give', 'take', 'like', 'cause', 'action'];
-    let defWords = cleanDef.split(' ').filter(w => w.length > 3 && !stopWords.includes(w));
-
-    // Step 3: Sort by length (longer words usually carry more descriptive visual meaning)
-    defWords.sort((a, b) => b.length - a.length);
-
-    // Step 4: Pick the best word, or fallback to the original vocabulary word
-    let searchKeyword = defWords.length > 0 ? defWords[0] : qObj.wordRef.split(' ')[0].replace(/[^a-zA-Z]/g, '');
+    // Use the exact vocabulary word to generate a unique image seed
+    let safeWordSeed = qObj.wordRef.split(' ')[0].replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
     // Feature: Teacher Custom Image Override
     if (qObj.target.customImage) {
         tempImg.src = qObj.target.customImage;
     } else {
-        // Guarantee a unique photo per keyword using a deterministic text seed
-        tempImg.src = `https://picsum.photos/seed/${searchKeyword}/320/240`;
+        // Guarantee a unique photo per word using Picsum
+        tempImg.src = `https://picsum.photos/seed/${safeWordSeed}/320/240`;
     }
 
     // TAP TO REGENERATE FIX: Pull a new image if the user taps it
@@ -384,8 +369,8 @@ function displayQuestion(qObj) {
         if (qObj.target.customImage) {
             newTempImg.src = qObj.target.customImage; 
         } else {
-            // Appending a random number forces a brand new seed photo on tap
-            let randomSeed = searchKeyword + Math.floor(Math.random() * 1000);
+            // Appending a random number to the word forces a brand new seed photo on tap
+            let randomSeed = safeWordSeed + Math.floor(Math.random() * 1000);
             newTempImg.src = `https://picsum.photos/seed/${randomSeed}/320/240`;
         }
     };
